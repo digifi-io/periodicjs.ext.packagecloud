@@ -1,7 +1,7 @@
 {
-  "name": "periodicjs.ext.packagecloud",
+  "name": "@digifi/periodicjs.ext.packagecloud",
   "description": "upload files to different cloud providers.",
-  "version": "6.0.1",
+  "version": "6.2.2",
   "main": "index.js",
   "engines": {
     "node": "^6.x"
@@ -9,7 +9,7 @@
   "contributors": [],
   "repository": {
     "type": "git",
-    "url": "git://github.com/typesettin/periodicjs.ext.packagecloud.git"
+    "url": "git+https://github.com/digifi-io/periodicjs.ext.packagecloud.git"
   },
   "config": {
     "blanket": {
@@ -21,11 +21,11 @@
   "license": "MIT",
   "scripts": {
     "test": "mocha -R spec --recursive",
-    "postinstall": "cd ../../ && periodicjs aex periodicjs.ext.packagecloud",
-    "postuninstall": "cd ../../ && periodicjs rex periodicjs.ext.packagecloud"
+    "postinstall": "cd ../../../ && periodicjs aex @digifi/periodicjs.ext.packagecloud",
+    "postuninstall": "cd ../../../ && periodicjs rex @digifi/periodicjs.ext.packagecloud"
   },
   "dependencies": {
-    "pkgcloud": "^1.4.0"
+    "pkgcloud": "^2.2.0"
   },
   "devDependencies": {
     "browserify": "^13.0.0",

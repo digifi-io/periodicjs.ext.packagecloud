@@ -1,23 +1,19 @@
 'use strict';
 const periodic = require('periodicjs');
-const pkgcloud = require('pkgcloud');
 const Busboy = require('busboy');
 const crypto = require('crypto');
 const moment = require('moment');
 const fs = require('fs-extra');
 const path = require('path');
 const mime = require('mime');
-const settings = require('./settings');
-let client = {};
-let publicPath = {};
 
 function pkgCloudUploadDirectory(options) {
-  const { req, periodic, upload_dir, include_timestamp_in_dir, } = options;
-  // console.log({ upload_dir });
+  const { req, upload_dir, include_timestamp_in_dir, } = options;
   const current_date = moment().format('YYYY/MM/DD');
   const upload_path_dir = (req.localuploadpath) ?
     req.localuploadpath :
     path.join(upload_dir, (include_timestamp_in_dir) ? current_date : '');
+
   return {
     current_date,
     upload_dir,
@@ -62,6 +58,7 @@ function pkgCloudFormFileHandler(fieldname, file, filename, encoding, mimetype) 
     original_filename: filename,
     filename: name,
     name,
+    size: 0,
     fileurl,
     location: filelocation,
     uploaddirectory: uploadDir.periodicDir,
@@ -73,23 +70,11 @@ function pkgCloudFormFileHandler(fieldname, file, filename, encoding, mimetype) 
       location: filelocation,
     }),
   };
-  // let response = (this.use_buffers) ? [] : '';
-  let filesize = 0;
+
   if (this.save_to_disk) {
     const uploadStream = pkgCloudClient.client.upload({
       container: pkgCloudClient.containerSettings.name,
-      remote: pkgCloudUploadFileName, //name,
-      cacheControl: this.cacheControl || 'public, max-age=86400',
-      contentType: mimetype,
-      ServerSideEncryption: (this.encrypted_client_side) ? 'AES256' : undefined,
-      acl: this.acl || 'public-read',
-      headers: {
-        // optionally provide raw headers to send to cloud files
-        'cache-control': this.cacheControl || 'public, max-age=86400',
-        'Cache-Control': this.cacheControl || 'public, max-age=86400',
-        'Content-Type': mimetype,
-        'x-amz-meta-Cache-Control': this.cacheControl || 'public, max-age=86400',
-      },
+      remote: pkgCloudUploadFileName,
     });
     uploadStream.on('error', (e) => {
       throw e;
@@ -98,7 +83,6 @@ function pkgCloudFormFileHandler(fieldname, file, filename, encoding, mimetype) 
     uploadStream.on('success', (cloudfile) => {
       this.cloudfiles.push(cloudfile);
       if (this.cloudfiles.length === this.files.length && this.completedFormProcessing === false && this.wait_for_cloud_uploads === true) {
-        // console.log('UPLOADS HAVE FINISHED');
         this.completeHandler();
         this.completedFormProcessing = true;
       }
@@ -114,19 +98,11 @@ function pkgCloudFormFileHandler(fieldname, file, filename, encoding, mimetype) 
     }
   }
   file.on('data', (chunk) => {
-    if (this.use_buffers) {
-      // response.push(chunk);
-      filesize = filesize + Buffer.byteLength(chunk);
-    } else {
-      // response += chunk;
-      filesize = filesize + chunk.length;
-    }
-    processedFile.size = filesize;
+    processedFile.size += this.use_buffers ? Buffer.byteLength(chunk) : chunk.length;
   });
   file.on('end', () => {
     this.files.push(processedFile);
     if (this.cloudfiles.length === this.files.length && this.completedFormProcessing === false && this.wait_for_cloud_uploads === true) {
-      // console.log('UPLOADS HAVE FINISHED');
       this.completeHandler();
       this.completedFormProcessing = true;
     }
@@ -138,7 +114,6 @@ function pkgCloudFormFileHandler(fieldname, file, filename, encoding, mimetype) 
 
   fieldHandler(fieldname, filename);
 }
-
 
 async function pkgCloudUploadFile({ fieldname = 'upload_file', renameOptions = { 'exclude-userstamp':true}, uploadDirectoryOptions = {}, user = {}, file, filename, encoding = 'binary', mimetype, include_asset_body, fileBody = {}, }) {
   filename = !filename ? path.parse(file).base : filename;
@@ -171,6 +146,7 @@ async function pkgCloudUploadFile({ fieldname = 'upload_file', renameOptions = {
     original_filename: filename,
     filename: name,
     name,
+    size: 0,
     fileurl,
     location: filelocation,
     uploaddirectory: uploadDir.periodicDir,
@@ -182,25 +158,15 @@ async function pkgCloudUploadFile({ fieldname = 'upload_file', renameOptions = {
       location: filelocation,
     }),
   };
-  // let response = (this.use_buffers) ? [] : '';
-  let filesize = 0;
+
   file = typeof file === 'string' ? fs.createReadStream(path.resolve(file)) : file;
-  
   
   return new Promise((resolve, reject) => {
     try {
       file.on('data', (chunk) => {
-        if (this.use_buffers) {
-          // response.push(chunk);
-          filesize = filesize + Buffer.byteLength(chunk);
-        } else {
-          // response += chunk;
-          filesize = filesize + chunk.length;
-        }
-        processedFile.size = filesize;
+        processedFile.size += this.use_buffers ? Buffer.byteLength(chunk) : chunk.length;
       });
       file.on('end', async () => {
-        // console.log('file end this.req.body', this.req.body)
         const files = [ processedFile ];
         const newassets = files.map(file => periodic.core.files.generateAssetFromFile({
           include_asset_body,
@@ -211,8 +177,6 @@ async function pkgCloudUploadFile({ fieldname = 'upload_file', renameOptions = {
         if (this.save_file_to_asset) {
           const assetDBName = this.asset_core_data || this.periodic.settings.express.config.asset_core_data;
           const assetDB = this.periodic.datas.get(assetDBName);
-          // console.log('this.periodic.datas',this.periodic.datas);
-          // console.log('assetDB',assetDB);
           const newdoc = (this.pre_asset_create_map)
             ? newassets.map(this.pre_asset_create_map({ req, res, periodic }))
             : newassets;
@@ -229,31 +193,13 @@ async function pkgCloudUploadFile({ fieldname = 'upload_file', renameOptions = {
       if (this.save_to_disk) {
         const uploadStream = pkgCloudClient.client.upload({
           container: pkgCloudClient.containerSettings.name,
-          remote: pkgCloudUploadFileName, //name,
-          cacheControl: this.cacheControl || 'public, max-age=86400',
-          contentType: mimetype,
-          ServerSideEncryption: (this.encrypted_client_side) ? 'AES256' : undefined,
-          acl: this.acl || 'public-read',
-          headers: {
-            // optionally provide raw headers to send to cloud files
-            'cache-control': this.cacheControl || 'public, max-age=86400',
-            'Cache-Control': this.cacheControl || 'public, max-age=86400',
-            'Content-Type': mimetype,
-            'x-amz-meta-Cache-Control': this.cacheControl || 'public, max-age=86400',
-          },
+          remote: pkgCloudUploadFileName,
         });
         uploadStream.on('error', (e) => {
           throw e;
         });
     
-        uploadStream.on('success', (cloudfile) => {
-          // this.cloudfiles.push(cloudfile);
-          // if (this.cloudfiles.length === this.files.length && this.completedFormProcessing === false && this.wait_for_cloud_uploads === true) {
-          //   // console.log('UPLOADS HAVE FINISHED');
-          //   this.completeHandler();
-          //   this.completedFormProcessing = true;
-          // }
-        });
+        uploadStream.on('success', () => {});
 
         if (this.encrypted_client_side) {
           const cipher = crypto.createCipher(this.client_encryption_algo, this.encryption_key);
@@ -300,7 +246,6 @@ function pkgCloudUploadMiddleware(req, res, next) {
     busboy.on('field', fieldHandler);
     busboy.on('finish', () => {
       if (this.wait_for_cloud_uploads === false) {
-        // console.log('COMPLETING BEFORE UPLOADS')
         completeHandler();
       }
     });
@@ -377,47 +322,3 @@ module.exports = {
   pkgCloudUploadFileHandler,
   pkgCloudUploadFile,
 };
-
-
-
-/**
- * {
-    "_id": "5936c6d5a2bd0204173a822d",
-    "attributes": {
-        "cdnUri": "http://s3-us-west-2.amazonaws.com/promisefinancial.com",
-        "cdnSslUri": "https://s3-us-west-2.amazonaws.com/promisefinancial.com",
-        "endpoint": {
-            "href": "https://s3-us-west-2.amazonaws.com/",
-            "path": "/",
-            "pathname": "/",
-            "hostname": "s3-us-west-2.amazonaws.com",
-            "port": 443,
-            "host": "s3-us-west-2.amazonaws.com",
-            "protocol": "https:"
-        },
-        "encrypted_client_side": false,
-        "periodicFilename": "58a323a7cf6c7658aae99fe3-bmb-card@4x-2017-06-06_11-14-27.png",
-        "cloudfilepath": "cloudfiles/2017/06/06/58a323a7cf6c7658aae99fe3-bmb-card@4x-2017-06-06_11-14-27.png",
-        "cloudcontainername": "promisefinancial.com",
-        "location": "https://s3-us-west-2.amazonaws.com/promisefinancial.com/cloudfiles%2F2017%2F06%2F06%2F58a323a7cf6c7658aae99fe3-bmb-card%404x-2017-06-06_11-14-27.png",
-        "delimiter": "::",
-        "lastModified": null,
-        "etag": "a3f08c007b5255c570e906d482a0bae6-1",
-        "fieldname": "mediafiles",
-        "client_encryption_algo": "aes192"
-    },
-    "size": 63688,
-    "assettype": "image/png",
-    "locationtype": "amazon",
-    "fileurl": "https://s3-us-west-2.amazonaws.com/promisefinancial.com/cloudfiles%2F2017%2F06%2F06%2F58a323a7cf6c7658aae99fe3-bmb-card%404x-2017-06-06_11-14-27.png",
-    "name": "58a323a7cf6c7658aae99fe3-bmb-card-4x-2017-06-06-11-14-27-png",
-    "title": "58a323a7cf6c7658aae99fe3-bmb-card-4x-2017-06-06-11-14-27-png",
-    "author": null,
-    "__v": 0,
-    "related_assets": [],
-    "categories": [],
-    "tags": [],
-    "authors": [],
-    "status": "VALID",
-    }
- */

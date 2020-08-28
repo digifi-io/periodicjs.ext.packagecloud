@@ -32,10 +32,8 @@ module.exports = () => {
             periodic.logger.error(err.message, err.stack);
           } else reject(err);
         });
-      // console.log({ extSettings })
-      // resolve(true);
     } catch (e) {
       reject(e);
     }
-  }); //Promise.resolve(true);
+  });
 };
